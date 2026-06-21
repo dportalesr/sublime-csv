@@ -1,0 +1,34 @@
+// Package-local override merged into the active "Daetherius" color scheme
+// (Sublime merges all .sublime-color-scheme files sharing the scheme's name).
+// Keeps this package's own scope colors with the package. `var(foreground)`
+// resolves against the merged variable set defined in the main scheme.
+//
+// Data cells inherit the base string color via `string.unquoted.csv` /
+// `string.quoted.double.csv`; only the header row needs a dedicated color.
+//
+// Zebra: even data rows carry `meta.row.alt.csv` (from the syntax). The
+// descendant rules below dim each cell type on those rows — a 2-scope
+// selector outranks the 1-scope base rule, so base rows keep full color.
+// Quoted text dims too: the syntax's alt-row quoted context stamps
+// `meta.row.alt.csv string.quoted.double.csv` onto the quoted body.
+{
+  "name": "Daetherius",
+  "rules": [
+    {
+      "name": "csv.header",
+      "scope": "markup.heading.csv",
+      "foreground": "#00cccc",
+    },
+    {
+      "name": "string.unquoted",
+      "scope": "string.unquoted.csv",
+      "foreground": "color(var(foreground) l(- 5%))"
+    },
+    {
+      "name": "csv.zebra.row",
+      "scope": "meta.row.alt.csv",
+      "foreground": "",
+      "background": "#00000055"
+    }
+  ]
+}

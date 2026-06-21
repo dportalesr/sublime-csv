@@ -1,0 +1,14 @@
+# SYNTAX TEST "Packages/CSV/CSV.sublime-syntax"
+foo,42,bar
+#^ string.unquoted.csv
+#   ^^ constant.numeric.csv
+alt,7,row
+#^ meta.row.alt.csv string.unquoted.csv
+#   ^ meta.row.alt.csv constant.numeric.csv
+x,"a""b",9
+# ^ punctuation.definition.string.begin.csv
+#  ^ string.quoted.double.csv
+#   ^^ constant.character.escape.csv
+#        ^ constant.numeric.csv
+q,"z,z",5
+#  ^ meta.row.alt.csv string.quoted.double.csv

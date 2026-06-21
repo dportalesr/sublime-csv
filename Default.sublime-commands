@@ -1,0 +1,10 @@
+[
+  {
+    "caption": "CSV: Toggle column padding",
+    "command": "csv_toggle_padding"
+  },
+  {
+    "caption": "CSV: Copy cell",
+    "command": "csv_copy_cell"
+  }
+]

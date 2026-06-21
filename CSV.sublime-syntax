@@ -1,0 +1,137 @@
+%YAML 1.2
+---
+# CSV (custom) — self-contained syntax, no dependency on the Advanced CSV
+# package. Comma-only for now (a static grammar can only target one
+# delimiter; multi-delimiter would mean one syntax variant per delimiter).
+#
+# Scopes are intentionally GENERIC leaf scopes so the active color scheme
+# styles them through its existing rules:
+#   markup.heading.csv                -> header-row cells (darker foreground)
+#   constant.numeric.csv              -> numeric cells   (theme number color)
+#   string.quoted.double.csv          -> quoted fields   (theme string color)
+#   string.unquoted.csv               -> plain cells     (theme base string color)
+#   constant.character.escape.csv     -> "" inside quote (theme escape color)
+#   punctuation.separator.sequence.csv-> the comma       (theme punctuation)
+#   meta.row.alt.csv                  -> even data rows  (dimmed: zebra effect)
+#
+# The FIRST line is the column-heading row; at its newline the syntax drops
+# into `body` for the data rows. A headerless file renders its single/first
+# row as a heading, the conventional CSV assumption.
+#
+# Data rows alternate parity (`body` <-> `body-alt`) for a zebra effect; the
+# alt rows carry `meta.row.alt.csv`, which the color scheme dims while keeping
+# each cell's type color (numbers, strings).
+#
+# Inter-cell whitespace is left UNSCOPED on purpose: csv_toggle_padding's
+# expanded form pads cells with " , " gutters, so treating space as a field
+# edge makes the compact and justified forms highlight identically.
+name: CSV
+scope: text.csv
+version: 2
+
+file_extensions:
+  - csv
+
+contexts:
+  main:
+    - meta_content_scope: meta.header.csv
+    - match: '\n'
+      set: body
+    - include: delimiter
+    - include: quoted-header
+    - match: '[^\s,"]+'
+      scope: markup.heading.csv
+    - include: gutter
+
+  # Data rows alternate parity for the zebra effect. Both share `row-tokens`
+  # for the non-quoted cells; each supplies its own quoted variant so the
+  # quoted body can also carry the row meta scope (a pushed child context
+  # would otherwise not inherit `body-alt`'s meta_content_scope). The scheme
+  # dims every cell type on the alt rows.
+  body:
+    - match: '\n'
+      set: body-alt
+    - include: quoted-field
+    - include: row-tokens
+
+  body-alt:
+    - meta_content_scope: meta.row.alt.csv
+    - match: '\n'
+      set: body
+    - include: quoted-field-alt
+    - include: row-tokens
+
+  row-tokens:
+    - include: delimiter
+    - include: number
+    - include: cell
+    - include: gutter
+
+  delimiter:
+    - match: ','
+      scope: punctuation.separator.sequence.csv
+
+  quoted-header:
+    - match: '"'
+      scope: punctuation.definition.string.begin.csv
+      push: inside-quoted-header
+
+  inside-quoted-header:
+    - meta_scope: markup.heading.csv
+    - match: '""'
+      scope: constant.character.escape.csv
+    - match: '"'
+      scope: punctuation.definition.string.end.csv
+      pop: true
+    - match: '[^"]+'
+
+  quoted-field-alt:
+    - match: '"'
+      scope: punctuation.definition.string.begin.csv
+      push: inside-quoted-field-alt
+
+  # Same as inside-quoted-field, but stamps the row meta scope alongside the
+  # string scope so alt-row quoted text dims like the rest of the row.
+  inside-quoted-field-alt:
+    - meta_scope: meta.row.alt.csv string.quoted.double.csv
+    - match: '""'
+      scope: constant.character.escape.csv
+    - match: '"'
+      scope: punctuation.definition.string.end.csv
+      pop: true
+    - match: '[^"]+'
+
+  quoted-field:
+    - match: '"'
+      scope: punctuation.definition.string.begin.csv
+      push: inside-quoted-field
+
+  inside-quoted-field:
+    - meta_scope: string.quoted.double.csv
+    # A doubled quote is the CSV escape for a literal ".
+    - match: '""'
+      scope: constant.character.escape.csv
+    - match: '"'
+      scope: punctuation.definition.string.end.csv
+      pop: true
+    # Field body: anything but a quote, including commas and spaces (so
+    # delimiters inside quotes are correctly NOT treated as separators).
+    # Unterminated quotes carry to the next line (embedded newlines).
+    - match: '[^"]+'
+
+  number:
+    # A cell that is wholly numeric. Field edges are start-of-line, comma,
+    # quote, or whitespace, so a value still scores as numeric when the
+    # padded form trails it with alignment spaces before the comma.
+    - match: '(?<![^\s,"])[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?(?=$|[\s,"])'
+      scope: constant.numeric.csv
+
+  cell:
+    # Any other run of non-delimiter, non-space characters is a plain cell.
+    # Scoped as a string so it inherits the theme's base string color.
+    - match: '[^\s,"]+'
+      scope: string.unquoted.csv
+
+  gutter:
+    # Padding / alignment whitespace between values and delimiters.
+    - match: '[ \t]+'

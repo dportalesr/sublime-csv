@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.cache
+.DS_Store
+
+# This repo IS a Sublime package, but ~/.gitignore_global ignores **/*.sublime*.
+# Keep transient workspaces ignored, but re-include the package source files
+# (negations here override the global pattern — repo .gitignore wins).
+*.sublime-workspace
+!*.sublime-syntax
+!*.sublime-settings
+!*.sublime-color-scheme
+!*.sublime-commands
