@@ -1,10 +1,13 @@
 """
-CSV: Toggle column padding.
+CSV editing commands: toggle padding, copy cell, sort by column, select
+column / select by value. Each command's specifics live in its class
+docstring; the rest of this docstring covers the padding toggle, whose
+parsing helpers the other commands share.
 
-One self-contained, dependency-free command toggles a CSV buffer between
-its compact source form and a readable expanded form whose columns are
-aligned with a `PADDING`-space gutter on each side of every delimiter,
-turning the delimiters themselves into visual column separators:
+The toggle moves a CSV buffer between its compact source form and a
+readable expanded form whose columns are aligned with a `PADDING`-space
+gutter on each side of every delimiter, turning the delimiters themselves
+into visual column separators:
 
     add padding -> edit cells -> (re-pad) -> collapse -> save
 
@@ -168,12 +171,11 @@ class CsvTogglePaddingCommand(sublime_plugin.TextCommand):
             self.view.sel().add(sublime.Region(begin, end))
 
 
-def _cell_span(line, col, delimiter):
-    """(start, end) of the field containing column ``col`` within ``line``.
+def _row_spans(line, delimiter):
+    """(start, end) spans of every field in ``line``.
 
     Splits on ``delimiter`` while respecting double-quoted fields, so a comma
-    inside a quoted value does not break the cell. A caret sitting on the
-    delimiter (``col`` == its index) belongs to the field it closes.
+    inside a quoted value does not break the cell.
     """
     spans = []
     start = 0
@@ -192,11 +194,30 @@ def _cell_span(line, col, delimiter):
             start = index + 1
         index += 1
     spans.append((start, length))
+    return spans
 
+
+def _cell_span(line, col, delimiter):
+    """(start, end) of the field containing column ``col`` within ``line``.
+
+    A caret sitting on the delimiter (``col`` == its index) belongs to the
+    field it closes.
+    """
+    spans = _row_spans(line, delimiter)
     for begin, end in spans:
         if begin <= col <= end:
             return begin, end
     return spans[-1]
+
+
+def _column_at(line, col, delimiter):
+    """Index of the field containing column ``col``, same ownership rule as
+    ``_cell_span``."""
+    spans = _row_spans(line, delimiter)
+    for index, (begin, end) in enumerate(spans):
+        if begin <= col <= end:
+            return index
+    return len(spans) - 1
 
 
 def _cell_value(raw):
@@ -244,3 +265,196 @@ class CsvCopyCellCommand(sublime_plugin.TextCommand):
         sublime.status_message(
             "Copied %d cell%s" % (count, "" if count == 1 else "s")
         )
+
+
+def _sort_key(value):
+    """Orderable key for a logical cell value: numbers sort numerically and
+    before strings, strings casefold, empty cells go last (ascending)."""
+    if not value:
+        return (2, 0.0, "")
+    try:
+        return (0, float(value), "")
+    except ValueError:
+        return (1, 0.0, value.casefold())
+
+
+def _toggle_direction(state, column):
+    """Ascending? True on first sort of ``column``; re-sorting the same
+    column flips the stored direction."""
+    if not state or state.get("column") != column:
+        return True
+    return not state.get("ascending", True)
+
+
+def _sorted_lines(lines, column, delimiter, ascending):
+    """Reorder data lines by ``column``'s logical values; the header (line 0)
+    and any trailing blank lines stay pinned. Lines move verbatim, so a
+    padded buffer stays aligned."""
+    if not lines:
+        return list(lines)
+
+    header, rest = lines[0], list(lines[1:])
+    trailing = []
+    while rest and rest[-1] == "":
+        trailing.append(rest.pop())
+
+    def key(line):
+        spans = _row_spans(line, delimiter)
+        if column >= len(spans):
+            return _sort_key("")
+        begin, end = spans[column]
+        return _sort_key(_cell_value(line[begin:end]))
+
+    rest.sort(key=key, reverse=not ascending)
+    return [header] + rest + trailing
+
+
+def _column_targets(lines, column, delimiter):
+    """Per-line ``(row, begin, end)`` selection offsets for ``column``.
+
+    Non-empty cells select the trimmed token (quotes included); empty cells
+    yield a bare caret (``begin == end``) placed after the delimiter gutter,
+    aligning with where content starts in the padded form. Blank lines and
+    rows without the column are skipped.
+    """
+    targets = []
+    for row, line in enumerate(lines):
+        if not line:
+            continue
+        spans = _row_spans(line, delimiter)
+        if column >= len(spans):
+            continue
+        begin, end = spans[column]
+        raw = line[begin:end]
+        stripped = raw.strip()
+        if stripped:
+            content_begin = begin + len(raw) - len(raw.lstrip())
+            targets.append((row, content_begin, content_begin + len(stripped)))
+        else:
+            anchor = begin if column == 0 else min(begin + PADDING, end)
+            targets.append((row, anchor, anchor))
+    return targets
+
+
+def _value_targets(lines, column, value, delimiter):
+    """``_column_targets`` narrowed to cells whose logical value equals
+    ``value``; an empty ``value`` targets only the column's empty cells."""
+    targets = []
+    for row, begin, end in _column_targets(lines, column, delimiter):
+        if _cell_value(lines[row][begin:end]) == value:
+            targets.append((row, begin, end))
+    return targets
+
+
+class CsvSortByColumnCommand(sublime_plugin.TextCommand):
+    """Sort data rows by the column under the first caret.
+
+    Row 0 is the header and stays pinned. Re-invoking on the same column
+    toggles ascending <-> descending (direction is remembered per view in
+    the ``csv_sort`` setting); a different column restarts ascending.
+    """
+
+    def is_enabled(self):
+        return _is_csv_view(self.view)
+
+    def is_visible(self):
+        return _is_csv_view(self.view)
+
+    def run(self, edit):
+        view = self.view
+        if not view.sel():
+            return
+
+        settings = sublime.load_settings(SETTINGS_FILE)
+        delimiter = _choose_delimiter(view, settings)
+
+        caret = view.sel()[0].b
+        line_region = view.line(caret)
+        column = _column_at(
+            view.substr(line_region), caret - line_region.begin(), delimiter
+        )
+
+        ascending = _toggle_direction(view.settings().get("csv_sort"), column)
+
+        whole = sublime.Region(0, view.size())
+        text = view.substr(whole)
+        lines = text.split("\n")
+        output = "\n".join(_sorted_lines(lines, column, delimiter, ascending))
+        if output != text:
+            view.replace(edit, whole, output)
+
+        view.settings().set("csv_sort", {"column": column, "ascending": ascending})
+
+        header_spans = _row_spans(lines[0], delimiter)
+        name = "column %d" % (column + 1)
+        if column < len(header_spans):
+            begin, end = header_spans[column]
+            name = _cell_value(lines[0][begin:end]) or name
+        sublime.status_message(
+            "Sorted by %s (%s)" % (name, "asc" if ascending else "desc")
+        )
+
+
+class CsvSelectColumnCommand(sublime_plugin.TextCommand):
+    """Select every cell of the column(s) under the caret(s).
+
+    Selections cover the trimmed cell token (quotes included); empty cells
+    get a bare caret aligned with the padded content start. With multiple
+    carets each distinct column is selected.
+    """
+
+    def is_enabled(self):
+        return _is_csv_view(self.view)
+
+    def is_visible(self):
+        return _is_csv_view(self.view)
+
+    def run(self, edit):
+        self._select(match_value=False)
+
+    def _select(self, match_value):
+        view = self.view
+        settings = sublime.load_settings(SETTINGS_FILE)
+        delimiter = _choose_delimiter(view, settings)
+        lines = view.substr(sublime.Region(0, view.size())).split("\n")
+
+        wanted = []
+        for region in view.sel():
+            line_region = view.line(region.b)
+            line = view.substr(line_region)
+            col = region.b - line_region.begin()
+            column = _column_at(line, col, delimiter)
+            if match_value:
+                begin, end = _cell_span(line, col, delimiter)
+                key = (column, _cell_value(line[begin:end]))
+            else:
+                key = column
+            if key not in wanted:
+                wanted.append(key)
+
+        regions = []
+        for key in wanted:
+            if match_value:
+                targets = _value_targets(lines, key[0], key[1], delimiter)
+            else:
+                targets = _column_targets(lines, key, delimiter)
+            for row, begin, end in targets:
+                point = view.text_point(row, 0)
+                regions.append(sublime.Region(point + begin, point + end))
+
+        if not regions:
+            return
+        view.sel().clear()
+        for region in regions:
+            view.sel().add(region)
+
+
+class CsvSelectColumnByValueCommand(CsvSelectColumnCommand):
+    """Select only the cells of the caret's column whose logical value
+    matches the caret cell's (case-sensitive; quoted and bare forms of the
+    same value match). On an empty cell, carets spawn only on the column's
+    empty cells.
+    """
+
+    def run(self, edit):
+        self._select(match_value=True)
