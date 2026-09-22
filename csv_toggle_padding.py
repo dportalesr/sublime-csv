@@ -94,7 +94,14 @@ def _quote(text, delimiter, auto_quote):
 
 
 def _parse(text, delimiter):
-    return list(csv.reader(io.StringIO(text), delimiter=delimiter, quotechar='"'))
+    return list(
+        csv.reader(
+            io.StringIO(text),
+            delimiter=delimiter,
+            quotechar='"',
+            skipinitialspace=True,
+        )
+    )
 
 
 def _format_compact(rows, delimiter, auto_quote):

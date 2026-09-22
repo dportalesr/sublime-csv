@@ -180,5 +180,14 @@ class ValueTargetsTests(unittest.TestCase):
         )
 
 
+class TogglePaddingRoundTripTests(unittest.TestCase):
+    def test_padded_quoted_cells_collapse_back_to_source(self):
+        src = 'a,b,c\nz,"x, y","say ""hi"""'
+        expanded = plugin._format_expanded(plugin._parse(src, ","), ",", True)
+        rows = plugin._parse(expanded, ",")
+        self.assertEqual(plugin._format_expanded(rows, ",", True), expanded)
+        self.assertEqual(plugin._format_compact(rows, ",", True), src)
+
+
 if __name__ == "__main__":
     unittest.main()
