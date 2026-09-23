@@ -293,6 +293,45 @@ def _toggle_direction(state, column):
     return not state.get("ascending", True)
 
 
+def _sort_permutation(lines, column, delimiter, ascending):
+    """Row map for the sort: ``result[old_row] == new_row``. Header (row 0)
+    and trailing blank lines map to themselves. Stable in both directions,
+    so equal keys and identical lines keep their original order."""
+    if not lines:
+        return []
+
+    trailing_count = 0
+    while trailing_count < len(lines) - 1 and lines[-1 - trailing_count] == "":
+        trailing_count += 1
+    data_end = len(lines) - trailing_count
+
+    def key(old_row):
+        line = lines[old_row]
+        spans = _row_spans(line, delimiter)
+        if column >= len(spans):
+            return _sort_key("")
+        begin, end = spans[column]
+        return _sort_key(_cell_value(line[begin:end]))
+
+    data_rows = list(range(1, data_end))
+    data_rows.sort(key=key, reverse=not ascending)
+
+    result = [0] * len(lines)
+    for new_row, old_row in enumerate(data_rows, start=1):
+        result[old_row] = new_row
+    for row in range(data_end, len(lines)):
+        result[row] = row
+    return result
+
+
+def _permuted(lines, dest):
+    """``lines`` rearranged so line ``old`` lands at row ``dest[old]``."""
+    result = [None] * len(lines)
+    for old_row, new_row in enumerate(dest):
+        result[new_row] = lines[old_row]
+    return result
+
+
 def _sorted_lines(lines, column, delimiter, ascending):
     """Reorder data lines by ``column``'s logical values; the header (line 0)
     and any trailing blank lines stay pinned. Lines move verbatim, so a
@@ -300,20 +339,7 @@ def _sorted_lines(lines, column, delimiter, ascending):
     if not lines:
         return list(lines)
 
-    header, rest = lines[0], list(lines[1:])
-    trailing = []
-    while rest and rest[-1] == "":
-        trailing.append(rest.pop())
-
-    def key(line):
-        spans = _row_spans(line, delimiter)
-        if column >= len(spans):
-            return _sort_key("")
-        begin, end = spans[column]
-        return _sort_key(_cell_value(line[begin:end]))
-
-    rest.sort(key=key, reverse=not ascending)
-    return [header] + rest + trailing
+    return _permuted(lines, _sort_permutation(lines, column, delimiter, ascending))
 
 
 def _column_targets(lines, column, delimiter):
@@ -386,9 +412,29 @@ class CsvSortByColumnCommand(sublime_plugin.TextCommand):
         whole = sublime.Region(0, view.size())
         text = view.substr(whole)
         lines = text.split("\n")
-        output = "\n".join(_sorted_lines(lines, column, delimiter, ascending))
+        dest = _sort_permutation(lines, column, delimiter, ascending)
+        output = "\n".join(_permuted(lines, dest))
         if output != text:
+            endpoints = [(view.rowcol(r.a), view.rowcol(r.b)) for r in view.sel()]
             view.replace(edit, whole, output)
+
+            regions = [
+                sublime.Region(
+                    view.text_point(dest[row_a], col_a),
+                    view.text_point(dest[row_b], col_b),
+                )
+                for (row_a, col_a), (row_b, col_b) in endpoints
+            ]
+            view.sel().clear()
+            view.sel().add_all(regions)
+            primary = regions[0]
+            view.show(primary, animate=False)
+
+            def show_primary():
+                if view.is_valid():
+                    view.show(primary, animate=False)
+
+            sublime.set_timeout(show_primary, 0)
 
         view.settings().set("csv_sort", {"column": column, "ascending": ascending})
 

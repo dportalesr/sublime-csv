@@ -23,6 +23,7 @@ Pure-helper contract in csv_toggle_padding.py:
   _sort_key(value)                             -> orderable tuple
   _toggle_direction(state, column)             -> bool (ascending)
   _sorted_lines(lines, column, delim, asc)     -> [line, ...]
+  _sort_permutation(lines, column, delim, asc) -> [new_row, ...] (old -> new)
   _column_targets(lines, column, delim)        -> [(row, begin, end), ...]
   _value_targets(lines, column, value, delim)  -> [(row, begin, end), ...]
 
@@ -30,10 +31,9 @@ Targets are per-line character offsets; begin == end means a bare caret.
 
 Not covered, deliberately: Sublime wiring (run(), is_enabled, status
 messages, selection restore) — thin adapters that fail loudly at runtime
-and would need heavy view fakes; equal-key sort stability (stdlib
-guarantee); interior blank lines and multi-caret column dedup (trivial
-loop, low blast radius); delimiter resolution (existing behavior,
-unchanged).
+and would need heavy view fakes; interior blank lines and multi-caret
+column dedup (trivial loop, low blast radius); delimiter resolution
+(existing behavior, unchanged).
 """
 
 import os
@@ -130,6 +130,20 @@ class SortedLinesTests(unittest.TestCase):
     def test_row_missing_the_column_sorts_as_empty(self):
         lines = ["h,x", "a", "b,1"]
         self.assertEqual(plugin._sorted_lines(lines, 1, ",", True), ["h,x", "b,1", "a"])
+
+
+class SortPermutationTests(unittest.TestCase):
+    def test_maps_old_row_to_new_row_with_header_pinned(self):
+        self.assertEqual(
+            plugin._sort_permutation(SortedLinesTests.LINES, 1, ",", True),
+            [0, 3, 1, 2, 4],
+        )
+
+    def test_descending_keeps_equal_keys_in_original_order(self):
+        lines = ["h", "b,2", "a,1", "b,2"]
+        self.assertEqual(
+            plugin._sort_permutation(lines, 1, ",", False), [0, 1, 3, 2]
+        )
 
 
 class ColumnTargetsTests(unittest.TestCase):
