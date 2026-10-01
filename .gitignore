@@ -11,3 +11,4 @@ __pycache__/
 !*.sublime-settings
 !*.sublime-color-scheme
 !*.sublime-commands
+!*.sublime-keymap

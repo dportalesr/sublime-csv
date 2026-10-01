@@ -15,6 +15,10 @@
     "*.psv": "|",
   },
   "auto_quote": true,
+  // tab / shift+tab select the next / previous cell's content so typing
+  // replaces it, spreadsheet style. false: land at the content start
+  // instead (clear a cell with ctrl+backspace). A per-view setting wins.
+  "tab_selects_cell": true,
   "extensions":
   [
     "csv",

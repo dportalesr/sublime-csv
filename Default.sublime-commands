@@ -4,8 +4,22 @@
     "command": "csv_toggle_padding"
   },
   {
+    "caption": "CSV: Next cell",
+    "command": "csv_move_to_cell",
+    "args": { "forward": true }
+  },
+  {
+    "caption": "CSV: Previous cell",
+    "command": "csv_move_to_cell",
+    "args": { "forward": false }
+  },
+  {
     "caption": "CSV: Copy cell",
     "command": "csv_copy_cell"
+  },
+  {
+    "caption": "CSV: Clear cell",
+    "command": "csv_clear_cell"
   },
   {
     "caption": "CSV: Sort by column",
@@ -18,5 +32,27 @@
   {
     "caption": "CSV: Select column by value",
     "command": "csv_select_column_by_value"
+  },
+  {
+    "caption": "CSV: Insert column",
+    "command": "csv_insert_column"
+  },
+  {
+    "caption": "CSV: Delete column",
+    "command": "csv_delete_column"
+  },
+  {
+    "caption": "CSV: Move column left",
+    "command": "csv_move_column",
+    "args": { "forward": false }
+  },
+  {
+    "caption": "CSV: Move column right",
+    "command": "csv_move_column",
+    "args": { "forward": true }
+  },
+  {
+    "caption": "CSV: Show shortcuts",
+    "command": "csv_show_shortcuts"
   }
 ]
