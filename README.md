@@ -1,107 +1,203 @@
-# CSV
+# CSV for Sublime Text
 
-Self-contained CSV package. No dependency on the Advanced CSV package.
+A Sublime Text 4 package for editing CSV files. It adds a CSV syntax with a
+highlighted header and zebra rows, a toggle between the compact file and a
+readable form with aligned columns, and spreadsheet-style editing in that
+aligned form: tab between cells, type over a cell without pushing the next
+column, and move, insert or delete whole columns.
 
-- `CSV.sublime-syntax` — comma-only grammar, scope `text.csv`. Generic leaf
-  scopes so the active color scheme styles them through existing rules: the
-  first (header) row is `markup.heading.csv`, data cells are
-  `string.unquoted.csv` / `string.quoted.double.csv`, numbers
-  `constant.numeric.csv`, the comma a punctuation separator. Data rows
-  alternate parity (`body` <-> `body-alt`); even rows add `meta.row.alt.csv`
-  for a zebra foreground (dimmed via descendant rules in the scheme override).
-- `csv_toggle_padding.py` — the commands:
-  - `csv_toggle_padding` — toggles a buffer between compact source and a
-    justified, ` , `-aligned readable form. Parses with the stdlib `csv`
-    module; settings come from `CSV.sublime-settings`.
-  - `csv_copy_cell` — copies the cell under each caret (trimmed, quotes
-    unwrapped) instead of the whole line. Quote-aware, so commas inside
-    quoted fields don't split the cell.
-  - `csv_sort_by_column` — sorts data rows by the column under the caret;
-    the header row stays pinned. Numbers sort numerically and before
-    strings, empty cells last. Repeat on the same column to flip
-    asc/desc (direction remembered per view). Works on compact and
-    padded buffers alike (lines move verbatim).
-  - `csv_select_column` — one selection per cell of the caret's column
-    (multiple carets: multiple columns). Empty cells get a bare caret
-    aligned with the padded content start.
-  - `csv_select_column_by_value` — like select column but only cells
-    matching the caret cell's value (case-sensitive, quote-insensitive);
-    on an empty cell it targets only the column's empty cells.
-  - `csv_move_column` — moves the caret's column one step right
-    (`forward: true`) or left across every row; carets ride along, so
-    repeated presses keep carrying it. A selection moves every column it
-    spans, adjacent columns move as a block, nothing moves past the edge.
-    Compact cells move verbatim; a padded buffer is realigned.
-  - `csv_insert_column` / `csv_delete_column` - insert an empty column
-    before the caret's column (one per selected column, before the run) or
-    delete the spanned columns, in every row. Carets land in the new column,
-    or on the one sliding into the gap. The last column can't be deleted.
-    Compact cells stay verbatim; a padded buffer is realigned.
-  - `csv_clear_cell` — empties the cell under each caret (quotes included)
-    and leaves the caret where its content starts. A selection clears every
-    cell it touches; across rows, the rectangle between its corners. Padded
-    rows keep their delimiters in place, so typing overtypes.
-  - `csv_overtype` - typing into a padded cell eats the spaces before its
-    closing delimiter, so the delimiter stays in its column until the
-    padding runs out; backspace and delete put spaces back. A selection
-    inside one cell (a quoted value with a delimiter counts as one cell)
-    is replaced or deleted the same way, so tab-select-then-type and
-    select-column-then-backspace keep the columns aligned. At a cell's
-    edge, backspace and delete stop instead of taking the gutter space, a
-    delimiter or a line break; restructure with the column commands or in
-    compact form. Auto-paired brackets and quotes absorb two. Inert in
-    compact form.
-  - `csv_move_to_cell` - spreadsheet-style tab: each caret goes to the
-    next (`forward: true`) or previous cell, wrapping across rows and
-    skipping blank lines; at the buffer's first or last cell it stays. With
-    `tab_selects_cell` (default on) it selects the cell's content, quotes
-    included, so typing replaces it; off, it lands at the content start. A
-    tab-delimited view inserts a tab instead.
-  - `csv_show_shortcuts` - popup at the caret listing every key binding
-    whose command is in this package's palette, read from the loaded
-    keymaps on each call so it always matches the real keys; labels are
-    the palette captions, order is the palette's.
-  - Blank-cell snap (listener, no key) - an up/down move landing in a
-    whitespace-only cell puts the caret where that cell's content starts,
-    like Home. Selections, page moves and left/right stay native.
-- `CSV.sublime-settings` — delimiter / `delimiter_mapping` / `auto_quote` /
-  `tab_selects_cell`.
-- `Daetherius.sublime-color-scheme` — package-local override merged into the
-  active Daetherius scheme; carries the header-row color (`markup.heading.csv`).
-  Data cells need no rule (their `string.*` scopes hit the theme's base string
-  color). Coupled to the Daetherius scheme by filename; rename both together.
-- `syntax_test_csv.csv` — run via Tools → Build (Syntax Tests).
-- `tests/` — specs for the pure command logic (sublime stubbed); run
-  `python3 -m unittest discover tests`.
+## Installation
 
-The keybindings live in the User keymap, all gated to `text.csv`. Plain keys
-go without `ctrl` where the scope makes them safe; letters keep it. `tab`
-yields to snippet fields and the completion popup. `ctrl+backspace` has to
-sit after any global binding of the same key, since the last match wins.
+Clone the repository into your Packages folder (Preferences → Browse
+Packages…) as `CSV`:
 
-| Keys             | Command                               |
-|------------------|---------------------------------------|
-| `alt+tab`        | `csv_toggle_padding`                  |
-| `tab`            | `csv_move_to_cell` (`forward: true`)  |
-| `shift+tab`      | `csv_move_to_cell` (`forward: false`) |
-| `ctrl+backspace` | `csv_clear_cell`                      |
-| `ctrl+s`         | `csv_sort_by_column`                  |
-| `ctrl+c`         | `csv_select_column`                   |
-| `ctrl+v`         | `csv_select_column_by_value`          |
-| `ctrl+i`         | `csv_insert_column`                   |
-| `ctrl+d`         | `csv_delete_column`                   |
-| `ctrl+p`         | `csv_move_column` (`forward: false`)  |
-| `ctrl+n`         | `csv_move_column` (`forward: true`)   |
-| `ctrl+h`         | `csv_show_shortcuts`                  |
+```sh
+git clone https://github.com/dportalesr/sublime-csv.git CSV
+```
 
-`super+c` is overridden to `csv_copy_cell`, gated to `text.csv` AND an empty
-selection — so with text selected, or in any other file, the native `copy`
-runs unchanged.
+Files ending in `.csv` open with the CSV syntax. For other extensions, open
+one and pick View → Syntax → Open all with current extension as… → CSV.
 
-`Default.sublime-keymap` is mechanism, not shortcuts: it binds
-`<character>` to `csv_overtype` (gated by its own `csv_overtype` context) and
-carries copies of Default's auto-pair bindings, which `<character>` would
-otherwise shadow. Refresh the copies if Sublime changes its defaults.
+The package ships no shortcuts of its own; see [Keybindings](#keybindings)
+for a suggested set.
 
-To make `.csv` open with this syntax: View → Syntax → "Open all with current
-extension as…" → CSV.
+## Aligned columns
+
+**CSV: Toggle column padding** switches the file between its compact form
+
+```
+id,name,city
+1,Ana López,Lima
+22,Bo,"Oslo, Norway"
+```
+
+and an aligned form, where every column is padded to its widest cell and
+the delimiters line up as column separators:
+
+```
+id , name      , city
+1  , Ana López , Lima
+22 , Bo        , "Oslo, Norway"
+```
+
+The command decides what to do from the file itself. A compact file gets
+aligned, an aligned file that you have edited out of line gets realigned,
+and a file that is already aligned collapses back to compact. A typical
+session is: align, edit, collapse, save. Collapse before saving if other
+tools read the file, since most CSV readers keep the padding spaces as part
+of the values.
+
+## Spreadsheet-style editing
+
+These behaviours apply while the file is in its aligned form; in the compact
+form, editing works as in any text file.
+
+- **Overtype.** Typing in a cell uses up the padding before the next
+  delimiter, so the columns to the right stay in place until the padding
+  runs out. Backspace and delete give the spaces back. Typing over or
+  deleting a selection inside one cell works the same way.
+- **Cell edges.** Backspace and delete stop at the edge of a cell instead of
+  removing the delimiter or joining two rows. To restructure, use the column
+  commands below or switch to the compact form.
+- **Tab between cells.** Next and previous cell move each caret across the
+  row and wrap to the next or previous row. By default the cell's content is
+  selected, so typing replaces it; see the `tab_selects_cell` setting.
+- **Blank cells.** Moving up or down into an empty cell puts the caret where
+  its content would start, not somewhere in the middle of the padding.
+
+## Commands
+
+All commands are in the command palette under **CSV:** and work with
+multiple carets.
+
+| Command                  | What it does                                                           |
+|--------------------------|------------------------------------------------------------------------|
+| Toggle column padding    | Aligns, realigns or collapses the columns, as described above.         |
+| Next cell, Previous cell | Moves to the neighbouring cell, wrapping across rows.                  |
+| Copy cell                | Copies the value under each caret: trimmed, quotes removed.            |
+| Clear cell               | Empties the cell under each caret, or every cell a selection touches.  |
+| Sort by column           | Sorts rows by the caret's column, header kept on top; again reverses.  |
+| Select column            | Selects every cell in the caret's column.                              |
+| Select column by value   | Selects the cells in the caret's column that hold the same value.      |
+| Insert column            | Inserts an empty column before the caret's column.                     |
+| Delete column            | Deletes the caret's column; a selection deletes every column it spans. |
+| Move column left, right  | Moves the caret's column one place; the caret moves with it.           |
+| Show shortcuts           | Lists your CSV key bindings in a popup, read from your keymaps.        |
+
+Sort puts numbers before text and compares them numerically; empty cells go
+last.
+
+## Keybindings
+
+The package does not bind any shortcuts, so it won't clash with yours. The
+set below is the one the package was built with, for macOS. Every binding is
+limited to CSV files, so the `ctrl` keys don't affect other files. On
+Windows and Linux, `ctrl+s`, `ctrl+c` and `ctrl+v` are save, copy and paste,
+so choose other keys there.
+
+Add the entries you want to your keymap (Preferences → Key Bindings):
+
+```json
+[
+  { "keys": ["alt+tab"], "command": "csv_toggle_padding", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["tab"], "command": "csv_move_to_cell", "args": { "forward": true }, "context": [
+      { "key": "selector", "operand": "text.csv" },
+      { "key": "has_next_field", "operand": false },
+      { "key": "auto_complete_visible", "operand": false }
+  ] },
+  { "keys": ["shift+tab"], "command": "csv_move_to_cell", "args": { "forward": false }, "context": [
+      { "key": "selector", "operand": "text.csv" },
+      { "key": "has_prev_field", "operand": false },
+      { "key": "auto_complete_visible", "operand": false }
+  ] },
+  { "keys": ["super+c"], "command": "csv_copy_cell", "context": [
+      { "key": "selector", "operand": "text.csv" },
+      { "key": "selection_empty", "operand": true, "match_all": true }
+  ] },
+  { "keys": ["ctrl+backspace"], "command": "csv_clear_cell", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+s"], "command": "csv_sort_by_column", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+c"], "command": "csv_select_column", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+v"], "command": "csv_select_column_by_value", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+i"], "command": "csv_insert_column", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+d"], "command": "csv_delete_column", "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+p"], "command": "csv_move_column", "args": { "forward": false }, "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+n"], "command": "csv_move_column", "args": { "forward": true }, "context": [{ "key": "selector", "operand": "text.csv" }] },
+  { "keys": ["ctrl+h"], "command": "csv_show_shortcuts", "context": [{ "key": "selector", "operand": "text.csv" }] }
+]
+```
+
+A few notes on these:
+
+- `tab` still expands snippet fields and accepts completions; the extra
+  conditions hand it back in those cases.
+- `super+c` copies just the cell only when nothing is selected; with a
+  selection it copies as usual.
+- When two bindings for the same key both apply, Sublime uses the later one.
+  If your keymap already binds `ctrl+backspace` for all files, put the CSV
+  entry after it.
+
+## Settings
+
+Override any of these in `Packages/User/CSV.sublime-settings`, or for a
+single file through its view settings.
+
+| Setting             | Default                               | Meaning                                                                    |
+|---------------------|---------------------------------------|----------------------------------------------------------------------------|
+| `delimiter`         | `","`                                 | Delimiter when nothing more specific applies.                              |
+| `delimiter_mapping` | `.csv` comma, `.tsv` tab, `.psv` pipe | Delimiter per file name pattern.                                           |
+| `auto_quote`        | `true`                                | Quote values that contain the delimiter or a quote when aligning.          |
+| `tab_selects_cell`  | `true`                                | Next and previous cell select the content; `false` places a caret instead. |
+
+## Colors
+
+The syntax uses generic scopes, so most color schemes style CSV files
+without changes:
+
+| Part                  | Scope                                |
+|-----------------------|--------------------------------------|
+| Header row            | `markup.heading.csv`                 |
+| Plain cells           | `string.unquoted.csv`                |
+| Quoted cells          | `string.quoted.double.csv`           |
+| Numbers               | `constant.numeric.csv`               |
+| Delimiters            | `punctuation.separator.sequence.csv` |
+| Every second data row | `meta.row.alt.csv`                   |
+
+The package includes rules for the Daetherius color scheme. For any other
+scheme, add your own through UI → Customize Color Scheme, for example:
+
+```json
+{
+  "rules": [
+    { "scope": "markup.heading.csv", "foreground": "#00cccc" },
+    { "scope": "meta.row.alt.csv", "background": "#00000055" }
+  ]
+}
+```
+
+## Limitations
+
+- Only commas are highlighted. The commands honor other delimiters, but a
+  tab- or pipe-separated file shows as a single column.
+- Quoted values that span several lines are not supported.
+- In the aligned form, cutting a selection, or typing a quote or bracket
+  over one (which wraps it), can shift the rest of the row. Toggle column
+  padding realigns it.
+- To provide overtype, the package takes over typing in CSV files, so it
+  carries copies of Sublime's auto-pairing bindings for quotes and
+  brackets. A future Sublime release that changes those bindings may need
+  the copies updated.
+
+## Development
+
+The command logic is covered by unit tests that run without Sublime Text:
+
+```sh
+python3 -m unittest discover tests
+```
+
+The syntax test runs inside Sublime: open `syntax_test_csv.csv` and use
+Tools → Build.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

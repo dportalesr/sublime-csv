@@ -1,13 +1,10 @@
 {
-  // Settings for the self-contained CSV plugin (syntax + csv_toggle_padding).
-  // Replaces the former dependency on AdvancedCSV.sublime-settings.
+  // CSV package settings. Override them in Packages/User/CSV.sublime-settings.
   //
-  // Delimiter resolution order in csv_toggle_padding:
-  //   per-view "delimiter" setting  >  delimiter_mapping (filename glob)  >
-  //   this "delimiter" default.
-  // The grammar highlights commas only for now; the toggle PARSER still
-  // honors these delimiters, so a .tsv/.psv expands/compacts correctly even
-  // though its delimiter is not colored yet.
+  // The delimiter comes from, in order: a per-view "delimiter" setting,
+  // the first delimiter_mapping pattern matching the file name, then the
+  // "delimiter" default below. Only commas are highlighted; the commands
+  // honor any of these delimiters.
   "delimiter": ",",
   "delimiter_mapping": {
     "*.csv": ",",
