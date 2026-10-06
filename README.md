@@ -56,6 +56,10 @@ form, editing works as in any text file.
   delimiter, so the columns to the right stay in place until the padding
   runs out. Backspace and delete give the spaces back. Typing over or
   deleting a selection inside one cell works the same way.
+- **Paste.** Pasting counts as typing: copy a cell, move to another row and
+  paste, and the columns stay aligned. With several carets and a clipboard
+  holding one line per caret, each caret gets its own line, as elsewhere in
+  Sublime.
 - **Cell edges.** Backspace and delete stop at the edge of a cell instead of
   removing the delimiter or joining two rows. To restructure, use the column
   commands below or switch to the compact form.
@@ -179,9 +183,13 @@ scheme, add your own through UI → Customize Color Scheme, for example:
 - Only commas are highlighted. The commands honor other delimiters, but a
   tab- or pipe-separated file shows as a single column.
 - Quoted values that span several lines are not supported.
-- In the aligned form, cutting a selection, or typing a quote or bracket
-  over one (which wraps it), can shift the rest of the row. Toggle column
-  padding realigns it.
+- In the aligned form, cutting a selection, typing a quote or bracket over
+  one (which wraps it), or pasting text that contains a delimiter, a tab or
+  a line break can shift the rest of the row. Toggle column padding realigns
+  it.
+- Copy cell removes a value's quotes, so a value that contains the
+  delimiter pastes back as two cells. To keep it whole, select the quoted
+  value and copy that.
 - To provide overtype, the package takes over typing in CSV files, so it
   carries copies of Sublime's auto-pairing bindings for quotes and
   brackets. A future Sublime release that changes those bindings may need

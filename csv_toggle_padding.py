@@ -1043,6 +1043,7 @@ class CsvShowShortcutsCommand(sublime_plugin.TextCommand):
 
 
 DELETE_LEFT_RIGHT = "Delete Left Right.sublime-macro"
+PASTE_COMMANDS = ("paste", "paste_and_indent")
 PAIR_BODIES = {False: "$0", True: "${0:$SELECTION}"}
 
 
@@ -1067,10 +1068,23 @@ def _pair_snippet(contents):
     return None
 
 
+def _paste_texts(clipboard, count):
+    """Text per region for a paste over ``count`` regions, dealt as the
+    native paste does: one clipboard line each when the line count matches,
+    else the whole clipboard everywhere."""
+    lines = clipboard.split("\n")
+    return lines if len(lines) == count else [clipboard] * count
+
+
+def _per_region(text, count):
+    return [text] * count if isinstance(text, str) else text
+
+
 def _overtype_edits(line, regions, text, delimiter, padded, tail="", keep=False):
-    """Each (begin, end) region of ``line`` becomes ``text`` + (its own text
-    if ``keep`` else nothing) + ``tail``; its caret column is where ``tail``
-    starts. Per touched cell, absorb the net growth with the unbroken run of
+    """Each (begin, end) region of ``line`` becomes ``text`` (one string for
+    all, or a list with one per region) + (its own text if ``keep`` else
+    nothing) + ``tail``; its caret column is where ``tail`` starts. Per
+    touched cell, absorb the net growth with the unbroken run of
     spaces that ends at the closing delimiter and starts no earlier than the
     end of its last region (pre-edit columns): growth > 0 removes up to that
     many from the run, delimiter side first; growth < 0 adds that many back
@@ -1082,6 +1096,7 @@ def _overtype_edits(line, regions, text, delimiter, padded, tail="", keep=False)
     reaches past its cell (a delimiter inside quotes belongs to the cell) or
     the text it removes holds an odd number of ``"``.
     """
+    texts = _per_region(text, len(regions))
     cells = {}
     for index, (begin, end) in enumerate(regions):
         cell = _cell_span(line, begin, delimiter)
@@ -1100,7 +1115,7 @@ def _overtype_edits(line, regions, text, delimiter, padded, tail="", keep=False)
         cursor = cell_begin
         for index in members:
             begin, end = regions[index]
-            for piece in (line[cursor:begin], text, line[begin:end] if keep else ""):
+            for piece in (line[cursor:begin], texts[index], line[begin:end] if keep else ""):
                 pieces.append(piece)
                 length += len(piece)
             carets[index] = cell_begin + shift + length
@@ -1129,13 +1144,14 @@ def _overtype_edits(line, regions, text, delimiter, padded, tail="", keep=False)
 
 def _overtype_plan(lines, regions, text, delimiter, delete=None, tail="", keep=False):
     """Whole-keystroke plan. ``lines`` maps row -> text for every region's
-    row and row 0; ``regions`` are (row_a, col_a, row_b, col_b). ``delete``
+    row and row 0; ``regions`` are (row_a, col_a, row_b, col_b); ``text`` is
+    one string for all regions or a list with one per region. ``delete``
     ("left" / "right" / "pair") turns bare carets into one- or two-character
     regions; a selection is deleted as it is. In a padded row with balanced
     quotes, a bare-caret left / right delete that would take a delimiter, a
     line break or a gutter space (``_at_cell_edge``) stops instead: that
-    caret stays and deletes nothing. None (run native) when ``text + tail``
-    holds a newline, tab, the delimiter or an odd number of ``"``, any
+    caret stays and deletes nothing. None (run native) when a ``text + tail``
+    holds a line break, tab, the delimiter or an odd number of ``"``, any
     region spans lines, any region's row has an odd number of ``"`` (its
     ``_row_spans`` scan ends inside quotes), any other bare-caret delete
     sits at a line boundary, any row's ``_overtype_edits`` is None, or
@@ -1143,11 +1159,12 @@ def _overtype_plan(lines, regions, text, delimiter, delete=None, tail="", keep=F
     [(row, begin, end)] selections, absorbed); a kept selection spans its
     wrapped text, a caret has begin == end.
     """
-    inserted = text + tail
-    if any(char in inserted for char in ("\n", "\t", delimiter)):
-        return None
-    if inserted.count('"') % 2:
-        return None
+    texts = _per_region(text, len(regions))
+    for inserted in {each + tail for each in texts}:
+        if any(char in inserted for char in ("\n", "\r", "\t", delimiter)):
+            return None
+        if inserted.count('"') % 2:
+            return None
 
     padded_header = _is_padded_row(lines[0], delimiter)
     selections = [None] * len(regions)
@@ -1181,7 +1198,8 @@ def _overtype_plan(lines, regions, text, delimiter, delete=None, tail="", keep=F
             return None
         padded = padded_header or _is_padded_row(line, delimiter)
         row_regions = [(begin, end) for _, begin, end in members]
-        result = _overtype_edits(line, row_regions, text, delimiter, padded, tail, keep)
+        row_texts = [texts[position] for position, _, _ in members]
+        result = _overtype_edits(line, row_regions, row_texts, delimiter, padded, tail, keep)
         if result is None:
             return None
         edits[row], carets, row_absorbed = result
@@ -1209,12 +1227,18 @@ def _at_cell_edge(line, col, delimiter, side):
     return False
 
 
-def _selection_plan(view, text="", tail="", keep=False, delete=None):
+def _selection_plan(view, text="", tail="", keep=False, delete=None, paste=None):
     """``_overtype_plan`` over the live selection, reading only the caret
-    rows and row 0."""
+    rows and row 0. With ``paste`` the text comes from the clipboard; an
+    empty clipboard has no plan."""
     regions = []
     for region in view.sel():
         regions.append(view.rowcol(region.begin()) + view.rowcol(region.end()))
+    if paste:
+        clipboard = sublime.get_clipboard()
+        if not clipboard:
+            return None
+        text = _paste_texts(clipboard, len(regions))
     lines = {}
     for row in {0}.union(region[0] for region in regions):
         lines[row] = view.substr(view.line(view.text_point(row, 0)))
@@ -1224,7 +1248,11 @@ def _selection_plan(view, text="", tail="", keep=False, delete=None):
 
 def _overtype_args(command_name, args):
     """``csv_overtype`` arguments for a native command it can take over:
-    pair snippets, single-character deletes, the empty-pair backspace macro."""
+    pair snippets, single-character deletes, the empty-pair backspace macro,
+    clipboard pastes (one with arguments, such as Linux's selection paste,
+    reads another source)."""
+    if command_name in PASTE_COMMANDS:
+        return None if args else {"paste": command_name}
     if command_name == "insert_snippet":
         pair = _pair_snippet(args.get("contents"))
         if pair:
@@ -1241,18 +1269,20 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
     """Type into padded cells without pushing the closing delimiter.
 
     Typed characters arrive through the package keymap's ``<character>``
-    binding as ``character``; pair snippets and deletes arrive rewritten by
-    ``CsvOvertypeListener``. Whatever ``_overtype_plan`` rejects runs as the
-    native command instead, so a keystroke is never dropped.
+    binding as ``character``; pair snippets, deletes and pastes (``paste``
+    names the native command, the text is read from the clipboard) arrive
+    rewritten by ``CsvOvertypeListener``. Whatever ``_overtype_plan``
+    rejects runs as the native command instead, so a keystroke is never
+    dropped.
     """
 
-    def run(self, edit, character=None, text="", tail="", keep=False, delete=None):
+    def run(self, edit, character=None, text="", tail="", keep=False, delete=None, paste=None):
         view = self.view
         if character is not None:
             text = character
-        plan = _selection_plan(view, text, tail, keep, delete)
+        plan = _selection_plan(view, text, tail, keep, delete, paste)
         if plan is None:
-            view.run_command(*self._native(character, text, tail, keep, delete))
+            view.run_command(*self._native(character, text, tail, keep, delete, paste))
             return
 
         edits, selections, _ = plan
@@ -1272,9 +1302,11 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
         if follow:
             view.show(view.sel()[0], animate=False)
 
-    def _native(self, character, text, tail, keep, delete):
+    def _native(self, character, text, tail, keep, delete, paste):
         if character is not None:
             return "insert", {"characters": character}
+        if paste:
+            return paste, {}
         if delete == "pair":
             return "run_macro_file", {"file": "res://Packages/Default/" + DELETE_LEFT_RIGHT}
         if delete:
@@ -1284,7 +1316,7 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
 
 class CsvOvertypeListener(sublime_plugin.EventListener):
     """Answers the ``csv_overtype`` context key that gates the ``<character>``
-    binding, and hands pair snippets and deletes in padded cells to
+    binding, and hands pair snippets, deletes and pastes in padded cells to
     ``csv_overtype``. Overwrite mode leaves everything native."""
 
     def on_query_context(self, view, key, operator, operand, match_all):

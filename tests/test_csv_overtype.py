@@ -1,20 +1,26 @@
 """Specs for overtype padding: typing into a padded cell consumes the spaces
 before its closing delimiter, so the delimiter keeps its column until the
-padding runs out; shrinking edits put spaces back.
+padding runs out; shrinking edits put spaces back. A paste is typed text
+read from the clipboard, one line per caret when the counts match.
 
 Pure-helper contract in csv_toggle_padding.py:
 
   _is_padded_row(line, delim)                       -> bool
   _pair_snippet(contents)                           -> (open, close, wraps) | None
+  _paste_texts(clipboard, count)                    -> [text, ...] (one per region)
   _overtype_edits(line, regions, text, delim, padded, tail, keep)
                                                     -> (edits, carets, absorbed) | None
   _overtype_plan(lines, regions, text, delim, delete, tail, keep)
                                                     -> ({row: edits}, selections, absorbed) | None
 
+``text`` is one string for every region or a list with one per region.
+
 Not covered, deliberately: Sublime glue (key binding, context key, listener
-rewrites, reverse-order replace, selection rebuild, scroll follow, undo
-granularity), checked live instead; the delete-mode line-boundary guard
-and tab delimiters, both one-line pass-throughs.
+rewrites, clipboard read, reverse-order replace, selection rebuild, scroll
+follow, undo granularity), checked live instead; the delete-mode
+line-boundary guard and tab delimiters, both one-line pass-throughs; a
+pasted value that fits, overflows or shrinks its cell, the same path as
+typed text.
 """
 
 import os
@@ -167,6 +173,23 @@ class PairTests(unittest.TestCase):
             plugin._overtype_plan(emptied, [(1, 3, 1, 3)], "", ",", delete="pair"),
             ({1: [(0, 5, "ab   ")]}, [(1, 2, 2)], 2),
         )
+
+
+class PasteTests(unittest.TestCase):
+    def test_clipboard_lines_go_one_per_caret_only_when_the_counts_match(self):
+        self.assertEqual(plugin._paste_texts("Ana\nBo", 2), ["Ana", "Bo"])
+        self.assertEqual(plugin._paste_texts("Ana", 3), ["Ana", "Ana", "Ana"])
+        self.assertEqual(plugin._paste_texts("Ana\nBo", 3), ["Ana\nBo"] * 3)
+
+    def test_each_caret_absorbs_its_own_pasted_value(self):
+        lines = {0: "id , name  , x", 1: "1  ,       , a", 2: "2  ,       , b"}
+        carets = [(2, 5, 2, 5), (1, 5, 1, 5)]
+        self.assertEqual(
+            plugin._overtype_plan(lines, carets, ["Bo", "Ana"], ","),
+            ({1: [(4, 11, " Ana   ")], 2: [(4, 11, " Bo    ")]}, [(2, 7, 7), (1, 8, 8)], 5),
+        )
+        self.assertIsNone(plugin._overtype_plan(lines, carets, ["Bo", "Oslo, Norway"], ","))
+        self.assertIsNone(plugin._overtype_plan(lines, carets, ["Bo", "Ana\nLi"], ","))
 
 
 if __name__ == "__main__":
