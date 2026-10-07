@@ -1,10 +1,10 @@
 # CSV for Sublime Text
 
 A Sublime Text 4 package for editing CSV files. It adds a CSV syntax with a
-highlighted header and zebra rows, a toggle between the compact file and a
-readable form with aligned columns, and spreadsheet-style editing in that
-aligned form: tab between cells, type over a cell without pushing the next
-column, and move, insert or delete whole columns.
+highlighted header and optional zebra rows, a toggle between the compact
+file and a readable form with aligned columns, and spreadsheet-style editing
+in that aligned form: tab between cells, type over a cell without pushing
+the next column, and move, insert or delete whole columns.
 
 ## Installation
 
@@ -177,8 +177,10 @@ without changes:
 | Delimiters            | `punctuation.separator.sequence.csv` |
 | Every second data row | `meta.row.alt.csv`                   |
 
-The package includes rules for the Daetherius color scheme. For any other
-scheme, add your own through UI → Customize Color Scheme, for example:
+The package sets no colors itself. `meta.row.alt.csv` stays uncolored until
+your scheme gives it one, so zebra rows are opt-in. To add them, or to
+restyle the header, add rules through UI → Customize Color Scheme, for
+example:
 
 ```json
 {
