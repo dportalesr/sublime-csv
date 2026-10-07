@@ -1,7 +1,8 @@
 """Specs for overtype padding: typing into a padded cell consumes the spaces
 before its closing delimiter, so the delimiter keeps its column until the
 padding runs out; shrinking edits put spaces back. A paste is typed text
-read from the clipboard, one line per caret when the counts match.
+read from the clipboard, one line per caret when the counts match. A cut
+deletes the selections and leaves carets without one where they are.
 
 Pure-helper contract in csv_toggle_padding.py:
 
@@ -16,8 +17,8 @@ Pure-helper contract in csv_toggle_padding.py:
 ``text`` is one string for every region or a list with one per region.
 
 Not covered, deliberately: Sublime glue (key binding, context key, listener
-rewrites, clipboard read, reverse-order replace, selection rebuild, scroll
-follow, undo granularity), checked live instead; the delete-mode
+rewrites, clipboard read and write, reverse-order replace, selection rebuild,
+scroll follow, undo granularity), checked live instead; the delete-mode
 line-boundary guard and tab delimiters, both one-line pass-throughs; a
 pasted value that fits, overflows or shrinks its cell, the same path as
 typed text.
@@ -190,6 +191,28 @@ class PasteTests(unittest.TestCase):
         )
         self.assertIsNone(plugin._overtype_plan(lines, carets, ["Bo", "Oslo, Norway"], ","))
         self.assertIsNone(plugin._overtype_plan(lines, carets, ["Bo", "Ana\nLi"], ","))
+
+
+class CutTests(unittest.TestCase):
+    def test_cut_empties_selections_and_leaves_bare_carets_in_place(self):
+        lines = {0: "id , name , x", 1: "1  , Ana  , a", 2: "2  ,      , b", 3: "3  , Bo   , c"}
+        regions = [(1, 5, 1, 8), (2, 5, 2, 5), (3, 5, 3, 7)]
+        self.assertEqual(
+            plugin._overtype_plan(lines, regions, "", ",", delete="cut"),
+            (
+                {1: [(4, 10, " " * 6)], 3: [(4, 10, " " * 6)]},
+                [(1, 5, 5), (2, 5, 5), (3, 5, 5)],
+                5,
+            ),
+        )
+
+    def test_cut_with_nothing_selected_or_in_a_compact_row_stays_native(self):
+        padded = {0: "id , name , x", 1: "1  , Ana  , a"}
+        self.assertIsNone(plugin._overtype_plan(padded, [(1, 5, 1, 5)], "", ",", delete="cut"))
+        compact = {0: "h,k", 1: "ab,c", 2: ",d"}
+        self.assertIsNone(
+            plugin._overtype_plan(compact, [(1, 0, 1, 2), (2, 0, 2, 0)], "", ",", delete="cut")
+        )
 
 
 if __name__ == "__main__":

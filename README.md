@@ -54,12 +54,16 @@ form, editing works as in any text file.
 
 - **Overtype.** Typing in a cell uses up the padding before the next
   delimiter, so the columns to the right stay in place until the padding
-  runs out. Backspace and delete give the spaces back. Typing over or
-  deleting a selection inside one cell works the same way.
+  runs out. Backspace and delete give the spaces back. Typing over,
+  deleting or cutting a selection inside one cell works the same way.
 - **Paste.** Pasting counts as typing: copy a cell, move to another row and
   paste, and the columns stay aligned. With several carets and a clipboard
   holding one line per caret, each caret gets its own line, as elsewhere in
   Sublime.
+- **Cut.** A cut over several carets puts one line per caret on the
+  clipboard, an empty one for a caret with nothing selected. Cut a selected
+  column that has blank cells, paste it over another column, and every value
+  lands on its own row.
 - **Cell edges.** Backspace and delete stop at the edge of a cell instead of
   removing the delimiter or joining two rows. To restructure, use the column
   commands below or switch to the compact form.
@@ -79,6 +83,7 @@ multiple carets.
 | Toggle column padding    | Aligns, realigns or collapses the columns, as described above.         |
 | Next cell, Previous cell | Moves to the neighbouring cell, wrapping across rows.                  |
 | Copy cell                | Copies the value under each caret: trimmed, quotes removed.            |
+| Cut cell                 | Copies the value under each caret like Copy cell, then empties it.     |
 | Clear cell               | Empties the cell under each caret, or every cell a selection touches.  |
 | Sort by column           | Sorts rows by the caret's column, header kept on top; again reverses.  |
 | Select column            | Selects every cell in the caret's column.                              |
@@ -118,6 +123,10 @@ Add the entries you want to your keymap (Preferences → Key Bindings):
       { "key": "selector", "operand": "text.csv" },
       { "key": "selection_empty", "operand": true, "match_all": true }
   ] },
+  { "keys": ["super+x"], "command": "csv_cut_cell", "context": [
+      { "key": "selector", "operand": "text.csv" },
+      { "key": "selection_empty", "operand": true, "match_all": true }
+  ] },
   { "keys": ["ctrl+backspace"], "command": "csv_clear_cell", "context": [{ "key": "selector", "operand": "text.csv" }] },
   { "keys": ["ctrl+s"], "command": "csv_sort_by_column", "context": [{ "key": "selector", "operand": "text.csv" }] },
   { "keys": ["ctrl+c"], "command": "csv_select_column", "context": [{ "key": "selector", "operand": "text.csv" }] },
@@ -134,8 +143,10 @@ A few notes on these:
 
 - `tab` still expands snippet fields and accepts completions; the extra
   conditions hand it back in those cases.
-- `super+c` copies just the cell only when nothing is selected; with a
-  selection it copies as usual.
+- `super+c` and `super+x` copy or cut just the cell only when nothing is
+  selected; with a selection they work as usual. Without the `super+x`
+  entry, cutting with nothing selected takes the whole row, as elsewhere in
+  Sublime; with it, select the row first to cut it.
 - When two bindings for the same key both apply, Sublime uses the later one.
   If your keymap already binds `ctrl+backspace` for all files, put the CSV
   entry after it.
@@ -183,13 +194,12 @@ scheme, add your own through UI → Customize Color Scheme, for example:
 - Only commas are highlighted. The commands honor other delimiters, but a
   tab- or pipe-separated file shows as a single column.
 - Quoted values that span several lines are not supported.
-- In the aligned form, cutting a selection, typing a quote or bracket over
-  one (which wraps it), or pasting text that contains a delimiter, a tab or
-  a line break can shift the rest of the row. Toggle column padding realigns
-  it.
-- Copy cell removes a value's quotes, so a value that contains the
-  delimiter pastes back as two cells. To keep it whole, select the quoted
-  value and copy that.
+- In the aligned form, typing a quote or bracket over a selection (which
+  wraps it), or pasting text that contains a delimiter, a tab or a line
+  break can shift the rest of the row. Toggle column padding realigns it.
+- Copy cell and Cut cell remove a value's quotes, so a value that contains
+  the delimiter pastes back as two cells. To keep it whole, select the
+  quoted value and copy or cut that.
 - To provide overtype, the package takes over typing in CSV files, so it
   carries copies of Sublime's auto-pairing bindings for quotes and
   brackets. A future Sublime release that changes those bindings may need

@@ -1,5 +1,5 @@
 """
-CSV editing commands: toggle padding, copy cell, sort by column, select
+CSV editing commands: toggle padding, copy / cut cell, sort by column, select
 column / select by value, move / insert / delete column, clear cell, tab
 between cells, shortcuts popup, overtype in padded cells, blank-cell snap
 on up/down. Each command's specifics live in its class docstring; the rest
@@ -249,6 +249,9 @@ class CsvCopyCellCommand(sublime_plugin.TextCommand):
     command defers to it too when invoked (e.g. from the palette) with one.
     """
 
+    native = "copy"
+    done = "Copied"
+
     def is_enabled(self):
         return _is_csv_view(self.view)
 
@@ -257,7 +260,7 @@ class CsvCopyCellCommand(sublime_plugin.TextCommand):
         regions = list(view.sel())
 
         if any(not region.empty() for region in regions):
-            view.run_command("copy")
+            view.run_command(self.native)
             return
 
         settings = sublime.load_settings(SETTINGS_FILE)
@@ -274,8 +277,25 @@ class CsvCopyCellCommand(sublime_plugin.TextCommand):
         sublime.set_clipboard("\n".join(values))
         count = len(values)
         sublime.status_message(
-            "Copied %d cell%s" % (count, "" if count == 1 else "s")
+            "%s %d cell%s" % (self.done, count, "" if count == 1 else "s")
         )
+
+
+class CsvCutCellCommand(CsvCopyCellCommand):
+    """Cut the cell under each caret instead of the whole line: the value is
+    copied as ``csv_copy_cell`` copies it, then ``csv_clear_cell`` empties
+    the cell. Bound to the native cut key the same way, and defers to the
+    built-in ``cut`` with a selection.
+    """
+
+    native = "cut"
+    done = "Cut"
+
+    def run(self, edit):
+        bare = all(region.empty() for region in self.view.sel())
+        super().run(edit)
+        if bare:
+            self.view.run_command("csv_clear_cell")
 
 
 def _sort_key(value):
@@ -1150,14 +1170,16 @@ def _overtype_plan(lines, regions, text, delimiter, delete=None, tail="", keep=F
     regions; a selection is deleted as it is. In a padded row with balanced
     quotes, a bare-caret left / right delete that would take a delimiter, a
     line break or a gutter space (``_at_cell_edge``) stops instead: that
-    caret stays and deletes nothing. None (run native) when a ``text + tail``
-    holds a line break, tab, the delimiter or an odd number of ``"``, any
-    region spans lines, any region's row has an odd number of ``"`` (its
-    ``_row_spans`` scan ends inside quotes), any other bare-caret delete
-    sits at a line boundary, any row's ``_overtype_edits`` is None, or
-    nothing is absorbed and no caret stopped. Otherwise ({row: edits},
-    [(row, begin, end)] selections, absorbed); a kept selection spans its
-    wrapped text, a caret has begin == end.
+    caret stays and deletes nothing. ``delete`` "cut" deletes selections
+    only: a bare caret in a padded row stays and deletes nothing. None (run
+    native) when a ``text + tail`` holds a line break, tab, the delimiter or
+    an odd number of ``"``, any region spans lines, any region's row has an
+    odd number of ``"`` (its ``_row_spans`` scan ends inside quotes), any
+    other bare-caret delete sits at a line boundary, a cut has a bare caret
+    in a compact row or no selection at all, any row's ``_overtype_edits``
+    is None, or nothing is absorbed and no caret stopped. Otherwise
+    ({row: edits}, [(row, begin, end)] selections, absorbed); a kept
+    selection spans its wrapped text, a caret has begin == end.
     """
     texts = _per_region(text, len(regions))
     for inserted in {each + tail for each in texts}:
@@ -1176,19 +1198,23 @@ def _overtype_plan(lines, regions, text, delimiter, delete=None, tail="", keep=F
         line = lines[row_a]
         if delete and begin == end:
             padded = padded_header or _is_padded_row(line, delimiter)
-            if (
-                padded
-                and line
+            stops = delete == "cut" or (
+                line
                 and not line.count('"') % 2
                 and _at_cell_edge(line, begin, delimiter, delete)
-            ):
+            )
+            if padded and stops:
                 selections[position] = (row_a, begin, begin)
                 continue
+            if delete == "cut":
+                return None
             before, after = {"left": (1, 0), "right": (0, 1), "pair": (1, 1)}[delete]
             begin, end = begin - before, end + after
             if begin < 0 or end > len(line):
                 return None
         rows.setdefault(row_a, []).append((position, begin, end))
+    if delete == "cut" and not rows:
+        return None
 
     edits = {}
     absorbed = 0
@@ -1249,10 +1275,12 @@ def _selection_plan(view, text="", tail="", keep=False, delete=None, paste=None)
 def _overtype_args(command_name, args):
     """``csv_overtype`` arguments for a native command it can take over:
     pair snippets, single-character deletes, the empty-pair backspace macro,
-    clipboard pastes (one with arguments, such as Linux's selection paste,
-    reads another source)."""
+    cuts, clipboard pastes (one with arguments, such as Linux's selection
+    paste, reads another source)."""
     if command_name in PASTE_COMMANDS:
         return None if args else {"paste": command_name}
+    if command_name == "cut":
+        return {"delete": "cut"}
     if command_name == "insert_snippet":
         pair = _pair_snippet(args.get("contents"))
         if pair:
@@ -1269,11 +1297,13 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
     """Type into padded cells without pushing the closing delimiter.
 
     Typed characters arrive through the package keymap's ``<character>``
-    binding as ``character``; pair snippets, deletes and pastes (``paste``
-    names the native command, the text is read from the clipboard) arrive
-    rewritten by ``CsvOvertypeListener``. Whatever ``_overtype_plan``
-    rejects runs as the native command instead, so a keystroke is never
-    dropped.
+    binding as ``character``; pair snippets, deletes, cuts and pastes
+    (``paste`` names the native command, the text is read from the
+    clipboard) arrive rewritten by ``CsvOvertypeListener``. A cut copies
+    first; when some carets have no selection the clipboard gets one line
+    per caret, theirs empty, so pasting over the same carets puts every
+    value back on its row. Whatever ``_overtype_plan`` rejects runs as the
+    native command instead, so a keystroke is never dropped.
     """
 
     def run(self, edit, character=None, text="", tail="", keep=False, delete=None, paste=None):
@@ -1284,6 +1314,11 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
         if plan is None:
             view.run_command(*self._native(character, text, tail, keep, delete, paste))
             return
+
+        if delete == "cut":
+            view.run_command("copy")
+            if any(region.empty() for region in view.sel()):
+                sublime.set_clipboard("\n".join(view.substr(region) for region in view.sel()))
 
         edits, selections, _ = plan
         follow = view.visible_region().contains(view.sel()[0].b)
@@ -1309,6 +1344,8 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
             return paste, {}
         if delete == "pair":
             return "run_macro_file", {"file": "res://Packages/Default/" + DELETE_LEFT_RIGHT}
+        if delete == "cut":
+            return "cut", {}
         if delete:
             return delete + "_delete", {}
         return "insert_snippet", {"contents": text + PAIR_BODIES[bool(keep)] + tail}
@@ -1316,8 +1353,8 @@ class CsvOvertypeCommand(sublime_plugin.TextCommand):
 
 class CsvOvertypeListener(sublime_plugin.EventListener):
     """Answers the ``csv_overtype`` context key that gates the ``<character>``
-    binding, and hands pair snippets, deletes and pastes in padded cells to
-    ``csv_overtype``. Overwrite mode leaves everything native."""
+    binding, and hands pair snippets, deletes, cuts and pastes in padded
+    cells to ``csv_overtype``. Overwrite mode leaves everything native."""
 
     def on_query_context(self, view, key, operator, operand, match_all):
         if key != "csv_overtype":

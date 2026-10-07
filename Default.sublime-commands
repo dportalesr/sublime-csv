@@ -18,6 +18,10 @@
     "command": "csv_copy_cell"
   },
   {
+    "caption": "CSV: Cut cell",
+    "command": "csv_cut_cell"
+  },
+  {
     "caption": "CSV: Clear cell",
     "command": "csv_clear_cell"
   },
