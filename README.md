@@ -175,12 +175,13 @@ without changes:
 | Quoted cells          | `string.quoted.double.csv`           |
 | Numbers               | `constant.numeric.csv`               |
 | Delimiters            | `punctuation.separator.sequence.csv` |
-| Every second data row | `meta.row.alt.csv`                   |
+| Odd data rows         | `meta.row.csv`                       |
+| Even data rows        | `meta.row.alt.csv`                   |
 
-The package sets no colors itself. `meta.row.alt.csv` stays uncolored until
-your scheme gives it one, so zebra rows are opt-in. To add them, or to
-restyle the header, add rules through UI → Customize Color Scheme, for
-example:
+The package sets no colors itself. `meta.row.csv` and `meta.row.alt.csv`
+stay uncolored until your scheme gives them a background, so zebra rows are
+opt-in. To add them, or to restyle the header, add rules through UI →
+Customize Color Scheme, for example:
 
 ```json
 {

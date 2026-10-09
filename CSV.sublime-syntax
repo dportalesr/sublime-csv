@@ -12,15 +12,16 @@
 #   string.unquoted.csv               -> plain cells     (theme base string color)
 #   constant.character.escape.csv     -> "" inside quote (theme escape color)
 #   punctuation.separator.sequence.csv-> the comma       (theme punctuation)
-#   meta.row.alt.csv                  -> even data rows  (dimmed: zebra effect)
+#   meta.row.csv                      -> odd data rows   (zebra effect)
+#   meta.row.alt.csv                  -> even data rows  (zebra effect)
 #
 # The FIRST line is the column-heading row; at its newline the syntax drops
 # into `body` for the data rows. A headerless file renders its single/first
 # row as a heading, the conventional CSV assumption.
 #
-# Data rows alternate parity (`body` <-> `body-alt`) for a zebra effect; the
-# alt rows carry `meta.row.alt.csv`, which the color scheme dims while keeping
-# each cell's type color (numbers, strings).
+# Data rows alternate parity (`body` <-> `body-alt`) for a zebra effect: odd
+# rows carry `meta.row.csv`, even rows `meta.row.alt.csv`, so a color scheme
+# can give each its own background while cells keep their type color.
 #
 # Inter-cell whitespace is left UNSCOPED on purpose: csv_toggle_padding's
 # expanded form pads cells with " , " gutters, so treating space as a field
@@ -49,6 +50,7 @@ contexts:
   # would otherwise not inherit `body-alt`'s meta_content_scope). The scheme
   # dims every cell type on the alt rows.
   body:
+    - meta_content_scope: meta.row.csv
     - match: '\n'
       set: body-alt
     - include: quoted-field
