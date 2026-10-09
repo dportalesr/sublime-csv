@@ -52,25 +52,22 @@ contexts:
     - include: gutter
 
   # Data rows alternate parity for the zebra effect. Both share `row-tokens`
-  # for the non-quoted cells; each supplies its own quoted variant so the
-  # quoted body can also carry the row meta scope (a pushed child context
-  # would otherwise not inherit `body-alt`'s meta_content_scope). The scheme
-  # dims every cell type on the alt rows.
+  # and differ only in their meta scope, which the quoted-field context
+  # pushed from a row inherits.
   body:
     - meta_content_scope: meta.row.csv
     - match: '\n'
       set: body-alt
-    - include: quoted-field
     - include: row-tokens
 
   body-alt:
     - meta_content_scope: meta.row.alt.csv
     - match: '\n'
       set: body
-    - include: quoted-field-alt
     - include: row-tokens
 
   row-tokens:
+    - include: quoted-field
     - include: delimiter
     - include: number
     - include: cell
@@ -87,22 +84,6 @@ contexts:
 
   inside-quoted-header:
     - meta_scope: markup.heading.csv
-    - match: '""'
-      scope: constant.character.escape.csv
-    - match: '"'
-      scope: punctuation.definition.string.end.csv
-      pop: true
-    - match: '[^"]+'
-
-  quoted-field-alt:
-    - match: '"'
-      scope: punctuation.definition.string.begin.csv
-      push: inside-quoted-field-alt
-
-  # Same as inside-quoted-field, but stamps the row meta scope alongside the
-  # string scope so alt-row quoted text dims like the rest of the row.
-  inside-quoted-field-alt:
-    - meta_scope: meta.row.alt.csv string.quoted.double.csv
     - match: '""'
       scope: constant.character.escape.csv
     - match: '"'
