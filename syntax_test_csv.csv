@@ -1,6 +1,8 @@
 # SYNTAX TEST "Packages/CSV/CSV.sublime-syntax"
+# <- meta.header.csv markup.heading.csv
+#               ^ meta.header.csv markup.heading.csv
 foo,42,bar
-#^ meta.row.csv string.unquoted.csv
+#^ meta.row.csv string.unquoted.csv - meta.header.csv
 #   ^^ constant.numeric.csv
 alt,7,row
 #^ meta.row.alt.csv string.unquoted.csv - meta.row.csv

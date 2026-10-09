@@ -12,6 +12,7 @@
 #   string.unquoted.csv               -> plain cells     (theme base string color)
 #   constant.character.escape.csv     -> "" inside quote (theme escape color)
 #   punctuation.separator.sequence.csv-> the comma       (theme punctuation)
+#   meta.header.csv                   -> header row      (first line only)
 #   meta.row.csv                      -> odd data rows   (zebra effect)
 #   meta.row.alt.csv                  -> even data rows  (zebra effect)
 #
@@ -34,7 +35,13 @@ file_extensions:
   - csv
 
 contexts:
+  # `main` only hands off to `header`. The root context is never popped, so
+  # a meta scope set here would cover every row of the file.
   main:
+    - match: ''
+      push: header
+
+  header:
     - meta_content_scope: meta.header.csv
     - match: '\n'
       set: body
